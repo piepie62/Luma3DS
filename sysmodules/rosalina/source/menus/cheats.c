@@ -175,7 +175,7 @@ static bool Cheat_IsValidAddress(const Handle processHandle, u32 address, u32 si
     MemInfo info;
     PageInfo out;
 
-    Result res = svcQueryDebugProcessMemory(&info, &out, processHandle, address);
+    Result res = svcQueryProcessMemory(&info, &out, processHandle, address);
     if (R_SUCCEEDED(res) && info.state != MEMSTATE_FREE && info.base_addr > 0 && info.base_addr <= address && address <= info.base_addr + info.size - size) {
         return true;
     }
@@ -293,6 +293,52 @@ static bool Cheat_Read32(const Handle processHandle, u32 offset, u32* retValue)
         // Result res = svcReadProcessMemory(&ReadWriteBuffer32, processHandle, addr, 4);
         // *retValue = *((u32*) (&ReadWriteBuffer32));
         // return R_SUCCEEDED(res);
+    }
+    return false;
+}
+
+static bool Cheat_Copy(const Handle processHandle, u32 inAddr, u32 outAddr, u32 size)
+{
+    bool inIsCheatPage = inAddr >= 0x01E81000 && inAddr + size < 0x01E82000;
+    bool outIsCheatPage = outAddr >= 0x01E81000 && outAddr + size < 0x01E82000;
+    if (Cheat_IsValidAddress(processHandle, inAddr, size))
+    {
+        if (Cheat_IsValidAddress(processHandle, outAddr, size))
+        {
+            memcpy((u8*)outAddr, (u8*)inAddr, size);
+            return true;
+        }
+        else if (outIsCheatPage)
+        {
+            memcpy(cheatPage + outAddr - 0x01E81000, (u8*)inAddr, size);
+            return true;
+        }
+    }
+    else if (inIsCheatPage)
+    {
+        if (Cheat_IsValidAddress(processHandle, outAddr, size))
+        {
+            memcpy((u8*)outAddr, cheatPage + inAddr - 0x01E81000, size);
+            return true;
+        }
+        else if (outIsCheatPage)
+        {
+            memcpy(cheatPage + outAddr - 0x01E81000, cheatPage + inAddr - 0x01E81000, size);
+            return true;
+        }
+    }
+    else if (inAddr >= (u32) cheatBuffer && inAddr + size < (u32) cheatBuffer + sizeof(cheatBuffer)) // Special case to facilitate easy data copy from within the cheat to the process
+    {
+        if (Cheat_IsValidAddress(processHandle, outAddr, size))
+        {
+            memcpy((u8*)outAddr, (u8*)inAddr, size);
+            return true;
+        }
+        else if (outIsCheatPage)
+        {
+            memcpy(cheatPage + outAddr - 0x01E81000, (u8*)inAddr, size);
+            return true;
+        }
     }
     return false;
 }
@@ -1689,22 +1735,13 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                             break;
                         case 0xC:
                         {
-                            u8 origActiveOffset = cheat_state.activeOffset;
-                            for (size_t i = 0; i < arg1; i++)
+                            u32 inAddr = cheat_state.offset2;
+                            u32 outAddr = cheat_state.offset1;
+
+                            if (!Cheat_Copy(processHandle, inAddr, outAddr, arg1))
                             {
-                                u8 data;
-                                cheat_state.activeOffset = 1;
-                                if (!Cheat_Read8(processHandle, 0, &data))
-                                {
-                                    return 0;
-                                }
-                                cheat_state.activeOffset = 0;
-                                if (!Cheat_Write8(processHandle, 0, data))
-                                {
-                                    return 0;
-                                }
+                                return 0;
                             }
-                            cheat_state.activeOffset = origActiveOffset;
                         }
                             break;
                         // Search for pattern
@@ -1722,26 +1759,18 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                                     {
                                         cheat_state.index++;
                                     }
-                                    for (size_t i = 0; i < arg1 - searchSize; i++)
+                                    if (Cheat_IsValidAddress(processHandle, *activeOffset(), arg1))
                                     {
-                                        u8 curVal;
-                                        newSkip = 0;
-                                        for (size_t j = 0; j < searchSize; j++)
+                                        u8* found = memsearch((u8*)*activeOffset(), searchData, arg1, searchSize);
+                                        if (found != NULL)
                                         {
-                                            if (!Cheat_Read8(processHandle, i + j, &curVal))
-                                            {
-                                                return 0;
-                                            }
-                                            if (curVal != searchData[j])
-                                            {
-                                                newSkip = 1;
-                                                break;
-                                            }
+                                            *activeOffset() = (u32) found;
+                                            newSkip = 0;
                                         }
-                                        if (newSkip == 0)
-                                        {
-                                            break;
-                                        }
+                                    }
+                                    else
+                                    {
+                                        return 0;
                                     }
                                 }
 
@@ -1777,54 +1806,23 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
     return 1;
 }
 
-static void Cheat_EatEvents(Handle debug)
-{
-    DebugEventInfo info;
-    Result r;
-
-    while(true)
-    {
-        if((r = svcGetProcessDebugEvent(&info, debug)) != 0)
-        {
-            if(r == (s32)(0xd8402009))
-            {
-                break;
-            }
-        }
-        svcContinueDebugEvent(debug, 3);
-    }
-}
-
 static Result Cheat_MapMemoryAndApplyCheat(u32 pid, CheatDescription* const cheat)
 {
     Handle processHandle;
-    Handle debugHandle;
     Result res;
     res = svcOpenProcess(&processHandle, pid);
     if (R_SUCCEEDED(res))
     {
         if (R_SUCCEEDED(res = svcMapProcessMemory(processHandle, 0x00100000, 0x03F00000)))
         {
-            res = svcDebugActiveProcess(&debugHandle, pid);
-            if (R_SUCCEEDED(res))
-            {
-                Cheat_EatEvents(debugHandle);
-                cheat->valid = Cheat_ApplyCheat(debugHandle, cheat);
+            cheat->valid = Cheat_ApplyCheat(processHandle, cheat);
 
-                svcCloseHandle(debugHandle);
-                svcCloseHandle(processHandle);
-                cheat->active = 1;
-                if (R_FAILED(res = svcUnmapProcessMemory(processHandle, 0x00100000, 0x03F00000)))
-                {
-                    sprintf(failureReason, "Unmapping memory failed");
-                    svcCloseHandle(processHandle);
-                }
-            }
-            else
+            svcCloseHandle(processHandle);
+            cheat->active = 1;
+            if (R_FAILED(res = svcUnmapProcessMemory(processHandle, 0x00100000, 0x03F00000)))
             {
-                sprintf(failureReason, "Debug process failed");
+                sprintf(failureReason, "Unmapping memory failed");
                 svcCloseHandle(processHandle);
-                return res;
             }
         }
         else
