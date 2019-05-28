@@ -182,9 +182,9 @@ static bool Cheat_IsValidAddress(const Handle processHandle, u32 address, u32 si
     return false;
 }
 
-static u32 ReadWriteBuffer32 = 0;
-static u16 ReadWriteBuffer16 = 0;
-static u8 ReadWriteBuffer8 = 0;
+// static u32 ReadWriteBuffer32 = 0;
+// static u16 ReadWriteBuffer16 = 0;
+// static u8 ReadWriteBuffer8 = 0;
 
 static bool Cheat_Write8(const Handle processHandle, u32 offset, u8 value)
 {
@@ -196,8 +196,10 @@ static bool Cheat_Write8(const Handle processHandle, u32 offset, u8 value)
     }
     if (Cheat_IsValidAddress(processHandle, addr, 1))
     {
-        *((u8*) (&ReadWriteBuffer8)) = value;
-        return R_SUCCEEDED(svcWriteProcessMemory(processHandle, &ReadWriteBuffer8, addr, 1));
+        *(u8*)(addr) = value;
+        return true;
+        // *((u8*) (&ReadWriteBuffer8)) = value;
+        // return R_SUCCEEDED(svcWriteProcessMemory(processHandle, &ReadWriteBuffer8, addr, 1));
     }
     return false;
 }
@@ -212,8 +214,10 @@ static bool Cheat_Write16(const Handle processHandle, u32 offset, u16 value)
     }
     if (Cheat_IsValidAddress(processHandle, addr, 2))
     {
-        *((u16*) (&ReadWriteBuffer16)) = value;
-        return R_SUCCEEDED(svcWriteProcessMemory(processHandle, &ReadWriteBuffer16, addr, 2));
+        *(u16*)(addr) = value;
+        return true;
+        // *((u16*) (&ReadWriteBuffer16)) = value;
+        // return R_SUCCEEDED(svcWriteProcessMemory(processHandle, &ReadWriteBuffer16, addr, 2));
     }
     return false;
 }
@@ -228,8 +232,10 @@ static bool Cheat_Write32(const Handle processHandle, u32 offset, u32 value)
     }
     if (Cheat_IsValidAddress(processHandle, addr, 4))
     {
-        *((u32*) (&ReadWriteBuffer32)) = value;
-        return R_SUCCEEDED(svcWriteProcessMemory(processHandle, &ReadWriteBuffer32, addr, 4));
+        *(u32*)(addr) = value;
+        return true;
+        // *((u32*) (&ReadWriteBuffer32)) = value;
+        // return R_SUCCEEDED(svcWriteProcessMemory(processHandle, &ReadWriteBuffer32, addr, 4));
     }
     return false;
 }
@@ -244,9 +250,11 @@ static bool Cheat_Read8(const Handle processHandle, u32 offset, u8* retValue)
     }
     if (Cheat_IsValidAddress(processHandle, addr, 1))
     {
-        Result res = svcReadProcessMemory(&ReadWriteBuffer8, processHandle, addr, 1);
-        *retValue = *((u8*) (&ReadWriteBuffer8));
-        return R_SUCCEEDED(res);
+        *retValue = *(u8*)(addr);
+        return true;
+        // Result res = svcReadProcessMemory(&ReadWriteBuffer8, processHandle, addr, 1);
+        // *retValue = *((u8*) (&ReadWriteBuffer8));
+        // return R_SUCCEEDED(res);
     }
     return false;
 }
@@ -261,9 +269,11 @@ static bool Cheat_Read16(const Handle processHandle, u32 offset, u16* retValue)
     }
     if (Cheat_IsValidAddress(processHandle, addr, 2))
     {
-        Result res = svcReadProcessMemory(&ReadWriteBuffer16, processHandle, addr, 2);
-        *retValue = *((u16*) (&ReadWriteBuffer16));
-        return R_SUCCEEDED(res);
+        *retValue = *(u16*)(addr);
+        return true;
+        // Result res = svcReadProcessMemory(&ReadWriteBuffer16, processHandle, addr, 2);
+        // *retValue = *((u16*) (&ReadWriteBuffer16));
+        // return R_SUCCEEDED(res);
     }
     return false;
 }
@@ -278,9 +288,11 @@ static bool Cheat_Read32(const Handle processHandle, u32 offset, u32* retValue)
     }
     if (Cheat_IsValidAddress(processHandle, addr, 4))
     {
-        Result res = svcReadProcessMemory(&ReadWriteBuffer32, processHandle, addr, 4);
-        *retValue = *((u32*) (&ReadWriteBuffer32));
-        return R_SUCCEEDED(res);
+        *retValue = *(u32*)(addr);
+        return true;
+        // Result res = svcReadProcessMemory(&ReadWriteBuffer32, processHandle, addr, 4);
+        // *retValue = *((u32*) (&ReadWriteBuffer32));
+        // return R_SUCCEEDED(res);
     }
     return false;
 }
@@ -1791,20 +1803,35 @@ static Result Cheat_MapMemoryAndApplyCheat(u32 pid, CheatDescription* const chea
     res = svcOpenProcess(&processHandle, pid);
     if (R_SUCCEEDED(res))
     {
-        res = svcDebugActiveProcess(&debugHandle, pid);
-        if (R_SUCCEEDED(res))
+        if (R_SUCCEEDED(res = svcMapProcessMemory(processHandle, 0x00100000, 0x03F00000)))
         {
-            Cheat_EatEvents(debugHandle);
-            cheat->valid = Cheat_ApplyCheat(debugHandle, cheat);
+            res = svcDebugActiveProcess(&debugHandle, pid);
+            if (R_SUCCEEDED(res))
+            {
+                Cheat_EatEvents(debugHandle);
+                cheat->valid = Cheat_ApplyCheat(debugHandle, cheat);
 
-            svcCloseHandle(debugHandle);
-            svcCloseHandle(processHandle);
-            cheat->active = 1;
+                svcCloseHandle(debugHandle);
+                svcCloseHandle(processHandle);
+                cheat->active = 1;
+                if (R_FAILED(res = svcUnmapProcessMemory(processHandle, 0x00100000, 0x03F00000)))
+                {
+                    sprintf(failureReason, "Unmapping memory failed");
+                    svcCloseHandle(processHandle);
+                }
+            }
+            else
+            {
+                sprintf(failureReason, "Debug process failed");
+                svcCloseHandle(processHandle);
+                return res;
+            }
         }
         else
         {
-            sprintf(failureReason, "Debug process failed");
+            sprintf(failureReason, "Mapping memory failed");
             svcCloseHandle(processHandle);
+            return res;
         }
     }
     else
@@ -2190,7 +2217,7 @@ void RosalinaMenu_Cheats(void)
 
     if (!cheatPage)
     {
-        Result res = svcControlMemory((u32*)cheatPage, 0x09000000, 0, 0x1000, MEMOP_ALLOC, MEMPERM_READ | MEMPERM_WRITE);
+        Result res = svcControlMemory((u32*)&cheatPage, 0x09000000, 0, 0x1000, MEMOP_ALLOC, MEMPERM_READ | MEMPERM_WRITE);
         if (R_FAILED(res))
         {
             char string[32] = {0};
