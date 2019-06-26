@@ -50,6 +50,7 @@ typedef struct CheatDescription
         u8 valid : 1;
         u8 hasKeyCode : 1;
         u8 activeStorage : 1;
+        u8 on : 1;
     };
     char name[39];
     u32 codesCount;
@@ -320,7 +321,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                 // 0 Type
                 // Format: 0XXXXXXX YYYYYYYY
                 // Description: 32bit write of YYYYYYYY to 0XXXXXXX.
-                if (!skipExecution)
+                if (!skipExecution && cheat->on)
                 {
                     if (!Cheat_Write32(processHandle, (arg0 & 0x0FFFFFFF), arg1)) return 0;
                 }
@@ -329,7 +330,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                 // 1 Type
                 // Format: 1XXXXXXX 0000YYYY
                 // Description: 16bit write of YYYY to 0XXXXXXX.
-                if (!skipExecution)
+                if (!skipExecution && cheat->on)
                 {
                     if (!Cheat_Write16(processHandle, (arg0 & 0x0FFFFFFF), (u16) (arg1 & 0xFFFF))) return 0;
                 }
@@ -338,7 +339,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                 // 2 Type
                 // Format: 2XXXXXXX 000000YY
                 // Description: 8bit write of YY to 0XXXXXXX.
-                if (!skipExecution)
+                if (!skipExecution && cheat->on)
                 {
                     if (!Cheat_Write8(processHandle, (arg0 & 0x0FFFFFFF), (u8) (arg1 & 0xFF))) return 0;
                 }
@@ -583,7 +584,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                 // B Type
                 // Format: BXXXXXXX 00000000
                 // Description: Loads offset register with value at given XXXXXXX
-                if (!skipExecution)
+                if (!skipExecution && cheat->on)
                 {
                     u32 value;
                     if (!Cheat_Read32(processHandle, arg0 & 0x0FFFFFFF, &value)) return 0;
@@ -621,6 +622,11 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         cheat_state.loopCount = cheat_state.data2;
                         cheat_state.storedStack = cheat_state.ifStack;
                         cheat_state.storedIfCount = cheat_state.ifCount;
+                        break;
+                    // CC type: a persistent toggle that allows turning a cheat on and off, for example, with a button press
+                    case 0x0C:
+                        if (!skipExecution)
+                            cheat->on = !cheat->on;
                         break;
                 }
                 break;
@@ -677,7 +683,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         }
                         // D0000000 00000001
                         // Loop break
-                        else if (!skipExecution && arg1 == 1)
+                        else if (!skipExecution && cheat->on && arg1 == 1)
                         {
                             cheat_state.loopCount = 0;
                             cheat_state.loopLine = -1;
@@ -772,7 +778,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         }
                         // D2000000 00000001
                         // Return
-                        else if (!skipExecution && arg1 == 1)
+                        else if (!skipExecution && cheat->on && arg1 == 1)
                         {
                             cheat_state.index = cheat->codesCount;
                         }
@@ -784,7 +790,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: loads the address X so that lines after can modify the value at address X.
                         // Note: used with the D4, D5, D6, D7, D8, and DC types.
                         // Example: D3000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -803,7 +809,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: adds to the value at the address defined by lines D3, D9, DA, and DB.
                         // Note: used with the D3, D9, DA, DB, DC types.
                         // Example: D4000000 00000025
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -826,7 +832,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: makes the value at the address defined by lines D3, D9, DA, and DB to YYYYYYYY.
                         // Note: used with the D3, D9, DA, DB, and DC types.
                         // Example: D5000000 34540099
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -849,7 +855,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: stores the value at address XXXXXXXX and to addresses in increments of 4.
                         // Note: used with the C, D3, and D9 types.
                         // Example: D3000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -875,7 +881,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: stores 2 bytes of the value at address XXXXXXXX and to addresses in increments of 2.
                         // Note: used with the C, D3, and DA types.
                         // Example: D7000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -901,7 +907,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: stores 1 byte of the value at address XXXXXXXX and to addresses in increments of 1.
                         // Note: used with the C, D3, and DB types.
                         // Example: D8000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -927,7 +933,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: loads the value from address X.
                         // Note: used with the D5 and D6 types.
                         // Example: D9000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -956,7 +962,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: loads 2 bytes from address X.
                         // Note: used with the D5 and D7 types.
                         // Example: DA000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -985,7 +991,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: loads 1 byte from address X.
                         // Note: used with the D5 and D8 types.
                         // Example: DB000000 023D6B28
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             if (codeArg == 0)
                             {
@@ -1014,7 +1020,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                         // Simple: stores the value at address(es) before it and to addresses in increments of V.
                         // Note: used with the C, D3, D5, D9, D8, DB types.
                         // Example: DC000000 00000100
-                        if (!skipExecution)
+                        if (!skipExecution && cheat->on)
                         {
                             *activeOffset() += arg1;
                         }
@@ -1258,7 +1264,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                 for (u32 i = 0; i < count; i++)
                 {
                     u8 byte = Cheat_GetNextTypeE(cheat);
-                    if (!skipExecution)
+                    if (!skipExecution && cheat->on)
                     {
                         if (!Cheat_Write8(processHandle, beginOffset + i, byte)) return 0;
                     }
@@ -1468,7 +1474,7 @@ static u32 Cheat_ApplyCheat(const Handle processHandle, CheatDescription* const 
                             if (searchSize <= arg1 && searchSize + cheat_state.index < cheat->codesCount)
                             {
                                 bool newSkip = true;
-                                if (!skipExecution) // Don't do an expensive operation if we don't have to
+                                if (!skipExecution && cheat->on) // Don't do an expensive operation if we don't have to
                                 {
                                     u8* searchData = (u8*)(cheat->codes + cheat_state.index + 1);
                                     cheat_state.index += searchSize / 8;
@@ -1594,6 +1600,7 @@ static CheatDescription* Cheat_AllocCheat()
     }
     cheat->active = 0;
     cheat->valid = 1;
+    cheat->on = 1;
     cheat->codesCount = 0;
     cheat->hasKeyCode = 0;
     cheat->storage1 = 0;
