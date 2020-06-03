@@ -195,6 +195,12 @@ static void findUsefulSymbols(void)
     for(; *off != 0xE320F000; off++);
     KObjectMutex__ErrorOccured = (void (*)(void))decodeArmBranch(off + 1);
 
+    for(off = (u32 *)officialSVCs[0x79]; *off != 0xE1A00009; off++);
+    for(; *off != 0xE1A00009; off++);
+    KSynchronizationObject__RegisterSyncWithThread = decodeArmBranch(++off);
+    for(; *off != 0xE1A00009; off++);
+    KSynchronizationObject__UnRegisterSyncWithThread = decodeArmBranch(++off);
+
     for(off = (u32 *)originalHandlers[4]; *off != (u32)exceptionStackTop; off++);
     kernelUsrCopyFuncsStart = (void *)off[1];
     kernelUsrCopyFuncsEnd = (void *)off[2];

@@ -134,4 +134,11 @@ Result svcCopyHandle(Handle *out, Handle outProcess, Handle in, Handle inProcess
  * @param in The input handle.
 */
 Result svcTranslateHandle(u32 *outKAddr, char *outClassName, Handle in);
+
+/**
+ * @brief Pauses or unpauses all of a process's threads
+ * @param process The process to pause
+ * @param pause Whether to pause (true) or unpause (false)
+ */
+Result svcPauseUnpauseProcess(Handle process, bool pause);
 ///@}

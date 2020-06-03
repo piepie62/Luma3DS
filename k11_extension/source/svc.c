@@ -46,6 +46,7 @@
 #include "svc/ControlService.h"
 #include "svc/CopyHandle.h"
 #include "svc/TranslateHandle.h"
+#include "svc/PauseUnpauseProcess.h"
 
 void *officialSVCs[0x7E] = {NULL};
 
@@ -148,6 +149,8 @@ void *svcHook(u8 *pageEnd)
             return CopyHandleWrapper;
         case 0xB2:
             return TranslateHandleWrapper;
+        case 0xB3:
+            return PauseUnpauseProcess;
 
         default:
             return (svcId <= 0x7D) ? officialSVCs[svcId] : NULL;

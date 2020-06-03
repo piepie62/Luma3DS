@@ -42,6 +42,8 @@ extern KProcess * (*KProcessHandleTable__ToKProcess)(KProcessHandleTable *this, 
 extern KThread * (*KProcessHandleTable__ToKThread)(KProcessHandleTable *this, Handle threadHandle);
 extern KAutoObject * (*KProcessHandleTable__ToKAutoObject)(KProcessHandleTable *this, Handle handle);
 extern void (*KSynchronizationObject__Signal)(KSynchronizationObject *this, bool isPulse);
+extern bool (*KSynchronizationObject__RegisterSyncWithThread)(KSynchronizationObject *this, KThread* thread);
+extern bool (*KSynchronizationObject__UnRegisterSyncWithThread)(KSynchronizationObject *this, KThread* thread);
 extern Result (*WaitSynchronization1)(void *this_unused, KThread *thread, KSynchronizationObject *syncObject, s64 timeout);
 extern Result (*KProcessHandleTable__CreateHandle)(KProcessHandleTable *this, Handle *out, KAutoObject *obj, u8 token);
 extern Result (*KProcessHwInfo__MapProcessMemory)(KProcessHwInfo *this, KProcessHwInfo *other, void *dst, void *src, u32 nbPages);
